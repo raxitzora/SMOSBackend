@@ -9,6 +9,7 @@ import authRoutes from "./routes/auth.routes.js";
 import platformRoutes from "./routes/platforms.routes.js";
 import libraryRoutes from "./routes/library.routes.js";
 import calendarRoutes from "./routes/calendar.routes.js";
+import dashboardRoutes from "./routes/dashboard.routes.js";
 
 const app = express();
 
@@ -51,6 +52,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/platforms", platformRoutes);
 app.use("/api/library", libraryRoutes);
 app.use("/api/calendar", calendarRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 
 // Health Check
