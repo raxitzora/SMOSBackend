@@ -1,11 +1,22 @@
 import {
   getPlatforms,
   getPlatform,
-  connectPlatform,
   disconnectPlatform,
+  savePlatformConnection
 } from "../services/platforms.service.js";
 
-import { generateYouTubeAuthUrl } from "../integrations/youtube/youtube.service.js";
+import {
+  generateOAuthState,
+  verifyOAuthState,
+} from "../utils/oauthState.js";
+
+import {
+  generateYouTubeAuthUrl,
+  exchangeCodeForTokens,
+  getYouTubeChannel,
+} from "../integrations/youtube/youtube.service.js";
+
+
 
 /**
  * Get all connected platforms
@@ -104,6 +115,9 @@ export const disconnect = async (req, res) => {
 /**
  * Generate Google OAuth URL
  */
+/**
+ * Generate Google OAuth URL
+ */
 export const connectGooglePlatform = async (req, res) => {
   try {
     const { service } = req.query;
@@ -115,11 +129,16 @@ export const connectGooglePlatform = async (req, res) => {
       });
     }
 
+   const state = generateOAuthState({
+  userId: req.user.id,
+  platform: service,
+});
+
     let authUrl;
 
     switch (service) {
       case "youtube":
-        authUrl = generateYouTubeAuthUrl();
+        authUrl = generateYouTubeAuthUrl(state);
         break;
 
       default:
@@ -135,6 +154,61 @@ export const connectGooglePlatform = async (req, res) => {
     });
 
   } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Google OAuth Callback
+ */
+export const googleOAuthCallback = async (req, res) => {
+  try {
+    const { code, state } = req.query;
+
+    if (!code || !state) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OAuth callback.",
+      });
+    }
+
+const { userId, platform } =
+  verifyOAuthState(state);
+
+    switch (platform) {
+      case "youtube": {
+        const tokens = await exchangeCodeForTokens(code);
+
+        const channel = await getYouTubeChannel(tokens);
+        console.log(channel);
+
+        await savePlatformConnection({
+          userId,
+          platformName: "youtube",
+          tokens,
+          channel,
+        });
+
+        break;
+      }
+
+      default:
+        return res.status(400).json({
+          success: false,
+          message: "Unsupported platform.",
+        });
+    }
+
+    return res.redirect(
+      "http://localhost:5173/platforms"
+    );
+
+  } catch (error) {
+    console.error(error);
+
     return res.status(500).json({
       success: false,
       message: error.message,

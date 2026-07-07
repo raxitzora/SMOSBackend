@@ -71,15 +71,6 @@ export const devLogin = async (req, res) => {
 
 
 
-
-
-
-
-
-
-
-
-
 export const loginWithGoogle = async (req, res) => {
   try {
     const { idToken } = req.body;

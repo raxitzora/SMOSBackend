@@ -1,18 +1,27 @@
 import pool from "../config/db.js";
 
+import {
+  getLatestVideos,
+} from "../integrations/youtube/youtube.service.js";
+
 /**
  * Get Dashboard Data
  */
-export const getDashboard = async (userId, platform) => {
-  // -----------------------------
-  // Get Platform Details
-  // -----------------------------
-  const platformResult = await pool.query(
+export const getDashboard = async (
+  userId,
+  platform
+) => {
+  const result = await pool.query(
     `
     SELECT
       account_name,
       account_email,
       account_picture,
+
+      access_token,
+      refresh_token,
+      token_expires_at,
+
       is_connected,
 
       followers,
@@ -22,89 +31,71 @@ export const getDashboard = async (userId, platform) => {
 
     FROM platforms
 
-    WHERE user_id = $1
+    WHERE
+      user_id = $1
       AND platform_name = $2
+
+    LIMIT 1
     `,
     [userId, platform]
   );
 
-  if (platformResult.rows.length === 0) {
+  if (result.rows.length === 0) {
     throw new Error(`${platform} platform not found.`);
   }
 
-  const platformData = platformResult.rows[0];
+  const platformData = result.rows[0];
 
   // -----------------------------
-  // Get Recent Posts
+  // Fetch Latest Videos Live
   // -----------------------------
-  const recentPostsResult = await pool.query(
-    `
-    SELECT
-      c.id,
-      c.title,
-      c.status,
 
-      cp.content_type,
-      cp.platform_status,
-      cp.published_at,
+  let recentPosts = [];
 
-      (
-        SELECT file_url
-        FROM content_assets
-        WHERE content_id = c.id
-          AND asset_type = 'thumbnail'
-        LIMIT 1
-      ) AS thumbnail
-
-    FROM content c
-
-    INNER JOIN content_platforms cp
-      ON cp.content_id = c.id
-
-    WHERE c.user_id = $1
-      AND cp.platform_name = $2
-
-    ORDER BY c.created_at DESC
-
-    LIMIT 10
-    `,
-    [userId, platform]
-  );
+  if (
+    platform === "youtube" &&
+    platformData.access_token
+  ) {
+    recentPosts = await getLatestVideos({
+      access_token: platformData.access_token,
+      refresh_token: platformData.refresh_token,
+      expiry_date:
+        platformData.token_expires_at?.getTime(),
+    });
+  }
 
   // -----------------------------
-  // Build Dashboard Response
+  // Dashboard Response
   // -----------------------------
+
   return {
-    account: {
-      name: platformData.account_name,
-      email: platformData.account_email,
-      picture: platformData.account_picture,
-      connected: platformData.is_connected,
-    },
+account: {
+  id: platformData.account_id,
+  url: platformData.account_url,
+  name: platformData.account_name,
+  email: platformData.account_email,
+  picture: platformData.account_picture,
+  connected: platformData.is_connected,
+},
 
     stats: {
-      followers: Number(platformData.followers),
-      subscribers: Number(platformData.subscribers),
-      totalPosts: Number(platformData.total_posts),
-      totalViews: Number(platformData.total_views),
+      followers: Number(
+        platformData.followers || 0
+      ),
+
+      subscribers: Number(
+        platformData.subscribers || 0
+      ),
+
+      totalPosts: Number(
+        platformData.total_posts || 0
+      ),
+
+      totalViews: Number(
+        platformData.total_views || 0
+      ),
     },
 
-    recentPosts: recentPostsResult.rows.map((post) => ({
-      id: post.id,
-      title: post.title,
-      status: post.status,
-
-      contentType: post.content_type,
-      platformStatus: post.platform_status,
-
-      publishedAt: post.published_at,
-
-      thumbnail: post.thumbnail,
-
-      // Placeholder metrics until live platform sync is implemented
-      views: 0,
-      likes: 0,
-      comments: 0,
-    })),
+    recentPosts,
   };
 };
