@@ -1,3 +1,4 @@
+import fs from "fs";
 import {
   getPlatforms,
   getPlatform,
@@ -14,6 +15,8 @@ import {
   generateYouTubeAuthUrl,
   exchangeCodeForTokens,
   getYouTubeChannel,
+    uploadYouTubeVideo as uploadVideoService,
+
 } from "../integrations/youtube/youtube.service.js";
 
 
@@ -208,6 +211,111 @@ const { userId, platform } =
 
   } catch (error) {
     console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Upload Video to Connected YouTube Channel
+ */
+export const uploadYoutubeVideo = async (
+  req,
+  res
+) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Video file is required.",
+      });
+    }
+
+    const {
+      title,
+      description,
+      tags,
+      privacyStatus = "private",
+      categoryId = "22",
+      madeForKids = false,
+    } = req.body;
+
+    // Get connected YouTube account
+    const platform =
+      await getPlatform(
+        req.user.id,
+        "youtube"
+      );
+
+    if (
+      !platform ||
+      !platform.is_connected
+    ) {
+      fs.unlinkSync(req.file.path);
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "YouTube account not connected.",
+      });
+    }
+
+    const tokens = {
+      access_token:
+        platform.access_token,
+
+      refresh_token:
+        platform.refresh_token,
+
+      expiry_date:
+        platform.token_expires_at?.getTime(),
+    };
+
+    const uploadedVideo =
+      await uploadVideoService({
+        tokens,
+
+        filePath: req.file.path,
+
+        title,
+
+        description,
+
+        tags: tags
+          ? JSON.parse(tags)
+          : [],
+
+        privacyStatus,
+
+        categoryId,
+
+        madeForKids:
+          madeForKids === "true",
+      });
+
+    // Delete temp file
+    fs.unlinkSync(req.file.path);
+
+    return res.status(200).json({
+      success: true,
+      message:
+        "Video uploaded successfully.",
+
+      data: uploadedVideo,
+    });
+
+  } catch (error) {
+    console.error(error);
+
+    // Remove temp file if upload fails
+    if (req.file) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch {}
+    }
 
     return res.status(500).json({
       success: false,

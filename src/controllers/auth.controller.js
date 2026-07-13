@@ -57,6 +57,8 @@ export const devLogin = async (req, res) => {
       success: true,
       message: "Development login successful.",
       user,
+      token,
+      user,
     });
 
   } catch (error) {

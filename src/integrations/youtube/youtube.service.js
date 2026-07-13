@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import oauth2Client from "../../config/google.js";
+import fs from "fs";
 
 /**
  * Generate YouTube OAuth URL
@@ -34,30 +35,15 @@ export const exchangeCodeForTokens = async (code) => {
  * Create YouTube Client
  */
 const getYouTubeClient = (tokens) => {
-  oauth2Client.setCredentials(tokens);
-
-  return google.youtube({
+    oauth2Client.setCredentials(tokens);
+    return google.youtube({
     version: "v3",
     auth: oauth2Client,
   });
 };
 
-/**
- * Convert ISO8601 Duration to Seconds
- */
-const durationToSeconds = (duration) => {
-  const match = duration.match(
-    /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/
-  );
 
-  if (!match) return 0;
 
-  const hours = Number(match[1] || 0);
-  const minutes = Number(match[2] || 0);
-  const seconds = Number(match[3] || 0);
-
-  return hours * 3600 + minutes * 60 + seconds;
-};
 
 /**
  * Get Authenticated Channel
@@ -144,9 +130,7 @@ const videos = await youtube.videos.list({
 });
 
   return videos.data.items.map((video) => {
-    const duration = durationToSeconds(
-      video.contentDetails.duration
-    );
+
 
     return {
       id: video.id,
@@ -161,12 +145,6 @@ const videos = await youtube.videos.list({
         video.snippet.thumbnails?.default?.url,
 
       publishedAt: video.snippet.publishedAt,
-
-      duration,
-
-      contentType:
-        duration <= 60 ? "short" : "video",
-
 
 
       views: Number(
@@ -186,4 +164,62 @@ const videos = await youtube.videos.list({
 
     };
   });
+};
+
+
+
+
+/**
+ * Upload Video to YouTube
+ */
+export const uploadYouTubeVideo = async ({
+  tokens,
+  filePath,
+  title,
+  description,
+  tags = [],
+  privacyStatus = "private",
+  categoryId = "22", // People & Blogs
+  madeForKids = false,
+}) => {
+  const youtube = getYouTubeClient(tokens);
+
+  const response = await youtube.videos.insert({
+    part: [
+      "snippet",
+      "status",
+    ],
+
+    requestBody: {
+      snippet: {
+        title,
+        description,
+        tags,
+        categoryId,
+      },
+
+      status: {
+        privacyStatus,
+        selfDeclaredMadeForKids: madeForKids,
+      },
+    },
+
+    media: {
+      body: fs.createReadStream(filePath),
+    },
+  });
+
+  const video = response.data;
+
+  return {
+    id: video.id,
+
+    url: `https://www.youtube.com/watch?v=${video.id}`,
+
+    title,
+
+    privacyStatus,
+
+    uploaded: true,
+  };
 };

@@ -10,6 +10,8 @@ import platformRoutes from "./routes/platforms.routes.js";
 import libraryRoutes from "./routes/library.routes.js";
 import calendarRoutes from "./routes/calendar.routes.js";
 import dashboardRoutes from "./routes/dashboard.routes.js";
+import aiRoutes from "./routes/ai.routes.js";
+import path from "path";
 
 const app = express();
 
@@ -53,6 +55,7 @@ app.use("/api/platforms", platformRoutes);
 app.use("/api/library", libraryRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/ai", aiRoutes);
 
 
 // Health Check
@@ -62,5 +65,12 @@ app.get("/", (req, res) => {
     message: "SMOS Backend is running 🚀",
   });
 });
+
+app.use(
+  "/uploads",
+  express.static(
+    path.join(process.cwd(), "uploads")
+  )
+);
 
 export default app;
