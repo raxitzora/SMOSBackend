@@ -6,10 +6,32 @@ import pool from "../config/db.js";
 export const getPlatforms = async (userId) => {
   const result = await pool.query(
     `
-    SELECT *
-    FROM platforms
-    WHERE user_id = $1
-    ORDER BY platform_name ASC
+  SELECT
+    id,
+    platform_name,
+
+    account_id,
+    account_name,
+    account_email,
+    account_username,
+    account_picture,
+    account_url,
+
+    followers,
+    subscribers,
+
+    total_posts,
+    total_views,
+
+    status,
+    is_connected,
+
+    created_at,
+    updated_at
+
+FROM platforms
+WHERE user_id = $1
+ORDER BY platform_name ASC
     `,
     [userId]
   );
@@ -17,10 +39,57 @@ export const getPlatforms = async (userId) => {
   return result.rows;
 };
 
+
+
+export const getPlatform = async (
+  userId,
+  platformName
+) => {
+  const result = await pool.query(
+    `
+    SELECT
+      id,
+      platform_name,
+
+      account_id,
+      account_name,
+      account_email,
+      account_username,
+      account_picture,
+      account_url,
+
+      followers,
+      subscribers,
+
+      total_posts,
+      total_views,
+
+      status,
+      is_connected,
+
+      created_at,
+      updated_at
+
+    FROM platforms
+
+    WHERE
+      user_id = $1
+      AND platform_name = $2
+
+    LIMIT 1
+    `,
+    [userId, platformName]
+  );
+
+  return result.rows[0] || null;
+};
+
+
 /**
- * Get one platform
+ * Get platform including OAuth tokens.
+ * Internal use only.
  */
-export const getPlatform = async (userId, platformName) => {
+export const getPlatformWithTokens = async (userId, platformName) => {
   const result = await pool.query(
     `
     SELECT *
@@ -35,10 +104,6 @@ export const getPlatform = async (userId, platformName) => {
   return result.rows[0] || null;
 };
 
-/**
- * Create platform connection
- * (OAuth implementation will come later)
- */
 
 
 /**
@@ -73,75 +138,16 @@ export const disconnectPlatform = async (userId, platformName) => {
 /**
  * Save or update OAuth platform connection
  */
-/**
- * Save or Update OAuth Platform Connection
- */
+
 export const savePlatformConnection = async ({
   userId,
   platformName,
   tokens,
   channel,
 }) => {
-  const existing = await getPlatform(userId, platformName);
-
-  if (existing) {
-    const result = await pool.query(
-      `
-      UPDATE platforms
-      SET
-        account_id = $1,
-        account_name = $2,
-        account_picture = $3,
-        account_url = $4,
-
-        subscribers = $5,
-        followers = $6,
-
-        total_posts = $7,
-        total_views = $8,
-
-        access_token = $9,
-        refresh_token = COALESCE($10, refresh_token),
-        token_expires_at = TO_TIMESTAMP($11 / 1000.0),
-
-        status = 'connected',
-        is_connected = true,
-        updated_at = CURRENT_TIMESTAMP
-
-      WHERE
-        user_id = $12
-        AND platform_name = $13
-
-      RETURNING *
-      `,
-      [
-        channel.id,
-        channel.title,
-        channel.thumbnail,
-        channel.url,
-
-        channel.subscribers,
-        channel.subscribers,
-
-        channel.videos,
-        channel.views,
-
-        tokens.access_token,
-        tokens.refresh_token,
-        tokens.expiry_date,
-
-        userId,
-        platformName,
-      ]
-    );
-
-    return result.rows[0];
-  }
-
   const result = await pool.query(
     `
-    INSERT INTO platforms
-    (
+    INSERT INTO platforms (
       user_id,
       platform_name,
 
@@ -161,10 +167,10 @@ export const savePlatformConnection = async ({
       token_expires_at,
 
       status,
-      is_connected
+      is_connected,
+      updated_at
     )
-    VALUES
-    (
+    VALUES (
       $1,
       $2,
 
@@ -184,9 +190,40 @@ export const savePlatformConnection = async ({
       TO_TIMESTAMP($13 / 1000.0),
 
       'connected',
-      true
+      true,
+      CURRENT_TIMESTAMP
     )
-    RETURNING *
+
+    ON CONFLICT (user_id, platform_name)
+
+    DO UPDATE SET
+      account_id = EXCLUDED.account_id,
+      account_name = EXCLUDED.account_name,
+      account_picture = EXCLUDED.account_picture,
+      account_url = EXCLUDED.account_url,
+
+      subscribers = EXCLUDED.subscribers,
+      followers = EXCLUDED.followers,
+
+      total_posts = EXCLUDED.total_posts,
+      total_views = EXCLUDED.total_views,
+
+      access_token = EXCLUDED.access_token,
+
+      refresh_token = COALESCE(
+        EXCLUDED.refresh_token,
+        platforms.refresh_token
+      ),
+
+      token_expires_at = EXCLUDED.token_expires_at,
+
+      status = 'connected',
+
+      is_connected = true,
+
+      updated_at = CURRENT_TIMESTAMP
+
+    RETURNING *;
     `,
     [
       userId,
@@ -198,7 +235,7 @@ export const savePlatformConnection = async ({
       channel.url,
 
       channel.subscribers,
-      channel.subscribers,
+      null,
 
       channel.videos,
       channel.views,

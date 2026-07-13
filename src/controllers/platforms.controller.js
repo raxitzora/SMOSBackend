@@ -2,6 +2,7 @@ import fs from "fs";
 import {
   getPlatforms,
   getPlatform,
+  getPlatformWithTokens,
   disconnectPlatform,
   savePlatformConnection
 } from "../services/platforms.service.js";
@@ -186,7 +187,6 @@ const { userId, platform } =
         const tokens = await exchangeCodeForTokens(code);
 
         const channel = await getYouTubeChannel(tokens);
-        console.log(channel);
 
         await savePlatformConnection({
           userId,
@@ -245,7 +245,7 @@ export const uploadYoutubeVideo = async (
 
     // Get connected YouTube account
     const platform =
-      await getPlatform(
+      await getPlatformWithTokens(
         req.user.id,
         "youtube"
       );
@@ -254,7 +254,7 @@ export const uploadYoutubeVideo = async (
       !platform ||
       !platform.is_connected
     ) {
-      fs.unlinkSync(req.file.path);
+      await fs.promises.unlink(req.file.path);
 
       return res.status(400).json({
         success: false,
@@ -274,6 +274,25 @@ export const uploadYoutubeVideo = async (
         platform.token_expires_at?.getTime(),
     };
 
+    let parsedTags = [];
+
+if (tags) {
+  try {
+    parsedTags = JSON.parse(tags);
+
+    if (!Array.isArray(parsedTags)) {
+      return res.status(400).json({
+        success: false,
+        message: "Tags must be an array.",
+      });
+    }
+  } catch {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid tags format.",
+    });
+  }
+}
     const uploadedVideo =
       await uploadVideoService({
         tokens,
@@ -284,9 +303,7 @@ export const uploadYoutubeVideo = async (
 
         description,
 
-        tags: tags
-          ? JSON.parse(tags)
-          : [],
+        tags: parsedTags,
 
         privacyStatus,
 
@@ -297,7 +314,7 @@ export const uploadYoutubeVideo = async (
       });
 
     // Delete temp file
-    fs.unlinkSync(req.file.path);
+    await fs.promises.unlink(req.file.path);
 
     return res.status(200).json({
       success: true,
@@ -313,8 +330,13 @@ export const uploadYoutubeVideo = async (
     // Remove temp file if upload fails
     if (req.file) {
       try {
-        fs.unlinkSync(req.file.path);
-      } catch {}
+        await fs.promises.unlink(req.file.path);
+      } catch (cleanupError) {
+    console.error(
+      "Failed to remove temporary upload:",
+      cleanupError
+    );
+  }
     }
 
     return res.status(500).json({

@@ -33,10 +33,12 @@ app.use(compression());
 app.use(cookieParser());
 
 // Parse JSON
-app.use(express.json());
+app.use(express.json({
+  limit:"2mb"
+}));
 
 // Parse Form Data
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ extended: true,limit:"2mb" }));
 
 // Rate Limiter
 const limiter = rateLimit({
