@@ -1,4 +1,7 @@
 import pool from "../config/db.js";
+import { getPlatformWithTokens } from "./platforms.service.js";
+import { publishToYouTube } from "../integrations/youtube/youtube.service.js";
+import fs from "fs"
 
 /**
  * Get dashboard stats for Content Library
@@ -322,4 +325,195 @@ export const deleteLibraryItem = async (
   );
 
   return result.rows[0];
+};
+
+export const publishLibraryItem = async ({
+  userId,
+  file,
+  body,
+}) => {
+  let client;
+
+  try {
+    if (!file) {
+      throw new Error("Video file is required.");
+    }
+
+    const {
+      title,
+      description,
+      tags,
+      privacyStatus = "private",
+      categoryId = "22",
+      madeForKids = false,
+    } = body;
+
+    // Get connected YouTube account
+    const platform = await getPlatformWithTokens(
+      userId,
+      "youtube"
+    );
+
+    if (!platform || !platform.is_connected) {
+      throw new Error(
+        "YouTube account is not connected."
+      );
+    }
+
+    let parsedTags = [];
+
+    if (tags) {
+      try {
+        parsedTags = JSON.parse(tags);
+      } catch {
+        throw new Error(
+          "Tags must be a valid JSON array."
+        );
+      }
+    }
+
+    const isMadeForKids =
+      madeForKids === true ||
+      madeForKids === "true";
+
+    // Upload to YouTube
+    const uploadedVideo =
+      await publishToYouTube({
+        platform,
+        filePath: file.path,
+        title,
+        description,
+        tags: parsedTags,
+        privacyStatus,
+        categoryId,
+        madeForKids: isMadeForKids,
+      });
+
+    // -----------------------------
+    // Save to Database
+    // -----------------------------
+
+    client = await pool.connect();
+
+    await client.query("BEGIN");
+
+    // Content
+    const contentResult = await client.query(
+      `
+      INSERT INTO content
+      (
+        user_id,
+        title,
+        description,
+        hashtags,
+        status
+      )
+      VALUES
+      (
+        $1,
+        $2,
+        $3,
+        $4,
+        'published'
+      )
+      RETURNING *;
+      `,
+      [
+        userId,
+        title,
+        description,
+        tags || "",
+      ]
+    );
+
+    const content = contentResult.rows[0];
+
+    // Platform
+    await client.query(
+      `
+      INSERT INTO content_platforms
+      (
+        content_id,
+        platform_name,
+        content_type,
+        platform_status,
+        published_at,
+        platform_post_id,
+        platform_post_url
+      )
+      VALUES
+      (
+        $1,
+        'youtube',
+        'video',
+        'published',
+        NOW(),
+        $2,
+        $3
+      );
+      `,
+      [
+        content.id,
+        uploadedVideo.id,
+        uploadedVideo.url,
+      ]
+    );
+
+    // Asset
+    await client.query(
+      `
+      INSERT INTO content_assets
+      (
+        content_id,
+        asset_type,
+        file_name,
+        file_url
+      )
+      VALUES
+      (
+        $1,
+        'video',
+        $2,
+        $3
+      );
+      `,
+      [
+        content.id,
+        file.originalname,
+        uploadedVideo.url,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    // Remove temporary upload
+    await fs.promises.unlink(file.path);
+
+    return {
+      content,
+      youtube: uploadedVideo,
+    };
+
+  } catch (error) {
+
+    if (client) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {}
+    }
+
+    if (file) {
+      try {
+        await fs.promises.unlink(file.path);
+      } catch {}
+    }
+
+    throw error;
+
+  } finally {
+
+    if (client) {
+      client.release();
+    }
+  }
 };

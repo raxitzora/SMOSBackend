@@ -5,6 +5,7 @@ import {
   createLibraryItem,
   updateLibraryItem,
   deleteLibraryItem,
+  publishLibraryItem,
 } from "../services/library.service.js";
 
 /**
@@ -154,6 +155,27 @@ export const deleteItem = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Content deleted successfully.",
+    });
+  } catch (error) {
+    return res.status(400).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const publishItem = async (req, res) => {
+  try {
+    const published = await publishLibraryItem({
+      userId: req.user.id,
+      file: req.file,
+      body: req.body,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Content published successfully.",
+      data: published,
     });
   } catch (error) {
     return res.status(400).json({

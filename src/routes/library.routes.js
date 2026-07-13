@@ -7,7 +7,9 @@ import {
   createItem,
   updateItem,
   deleteItem,
+  publishItem
 } from "../controllers/library.controller.js";
+import upload from "../middlewares/upload.middleware.js";
 
 import { protect } from "../middlewares/auth.middleware.js";
 
@@ -42,5 +44,12 @@ router.put("/:id", protect, updateItem);
  * Delete Content
  */
 router.delete("/:id", protect, deleteItem);
+
+router.post(
+  "/publish",
+  protect,
+  upload.single("video"),
+  publishItem
+);
 
 export default router;

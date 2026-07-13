@@ -268,3 +268,32 @@ export const uploadYouTubeVideo = async ({
     handleGoogleApiError(error);
   }
 };
+
+export const publishToYouTube = async ({
+    platform,
+    filePath,
+    title,
+    description,
+    tags,
+    privacyStatus,
+    categoryId,
+    madeForKids,
+}) => {
+
+    const tokens = {
+        access_token: platform.access_token,
+        refresh_token: platform.refresh_token,
+        expiry_date: platform.token_expires_at?.getTime(),
+    };
+
+    return uploadYouTubeVideo({
+        tokens,
+        filePath,
+        title,
+        description,
+        tags,
+        privacyStatus,
+        categoryId,
+        madeForKids,
+    });
+};
